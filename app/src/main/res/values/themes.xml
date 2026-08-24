@@ -1,0 +1,4 @@
+<resources>
+
+    <style name="Theme.SMSGateway" parent="Theme.MaterialComponents.Light" />
+</resources>

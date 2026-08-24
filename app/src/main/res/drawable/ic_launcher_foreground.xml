@@ -1,0 +1,31 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Modern Stylized Message Bubble (White) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,36 h48 c3.3,0 6,2.7 6,6 v26 c0,3.3 -2.7,6 -6,6 h-34 l-10,10 v-10 h-4 c-3.3,0 -6,-2.7 -6,-6 v-26 c0,-3.3 2.7,-6 6,-6 Z" />
+
+    <!-- Transmission Signal Icon (Teal) -->
+    <!-- Signal Dot -->
+    <path
+        android:fillColor="#00838F"
+        android:pathData="M54,58 m-3,0 a3,3 0 1,1 6,0 a3,3 0 1,1 -6,0" />
+
+    <!-- Signal Waves -->
+    <path
+        android:strokeColor="#00838F"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M46,50 c2.5,-3 13.5,-3 16,0" />
+    <path
+        android:strokeColor="#00838F"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M40,44 c5,-6 23,-6 28,0" />
+
+</vector>
+
