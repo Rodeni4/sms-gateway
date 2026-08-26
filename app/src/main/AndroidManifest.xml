@@ -37,6 +37,15 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <receiver
+            android:name=".service.SmsStatusReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="ru.myski.vodokanal.smsgateway.ACTION_SMS_SENT" />
+                <action android:name="ru.myski.vodokanal.smsgateway.ACTION_SMS_DELIVERED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>
