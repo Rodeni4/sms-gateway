@@ -8,6 +8,8 @@ import java.util.UUID
 class GatewayConfig(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    val port: Int = 8082
+
     fun getApiKey(): String {
         var apiKey = prefs.getString(KEY_API_KEY, null)
         if (apiKey == null) {
@@ -18,6 +20,9 @@ class GatewayConfig(context: Context) {
         }
         return apiKey
     }
+    
+    val apiKey: String
+        get() = getApiKey()
 
     companion object {
         private const val PREFS_NAME = "gateway_prefs"

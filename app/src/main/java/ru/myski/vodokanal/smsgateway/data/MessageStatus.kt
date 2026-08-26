@@ -2,10 +2,14 @@ package ru.myski.vodokanal.smsgateway.data
 
 import org.json.JSONObject
 
+enum class SmsStatus {
+    QUEUED, SENT, SEND_FAILED, DELIVERY_PENDING, DELIVERED, DELIVERY_FAILED, DELIVERY_UNKNOWN
+}
+
 data class MessageStatus(
     val messageId: String,
     val recipient: String,
-    var status: String,
+    var status: SmsStatus,
     val createdAt: Long = System.currentTimeMillis(),
     var updatedAt: Long = System.currentTimeMillis(),
     val totalParts: Int,
@@ -19,7 +23,7 @@ data class MessageStatus(
         return JSONObject().apply {
             put("messageId", messageId)
             put("recipient", recipient)
-            put("status", status)
+            put("status", status.name)
             put("createdAt", createdAt)
             put("updatedAt", updatedAt)
             put("totalParts", totalParts)
@@ -36,7 +40,7 @@ data class MessageStatus(
             return MessageStatus(
                 messageId = json.getString("messageId"),
                 recipient = json.getString("recipient"),
-                status = json.getString("status"),
+                status = SmsStatus.valueOf(json.getString("status")),
                 createdAt = json.getLong("createdAt"),
                 updatedAt = json.getLong("updatedAt"),
                 totalParts = json.getInt("totalParts"),

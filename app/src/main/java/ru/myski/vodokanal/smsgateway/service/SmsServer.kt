@@ -15,17 +15,20 @@ import org.json.JSONObject
 import ru.myski.vodokanal.smsgateway.data.GatewayConfig
 import ru.myski.vodokanal.smsgateway.data.MessageStatus
 import ru.myski.vodokanal.smsgateway.data.MessageStatusStore
+import ru.myski.vodokanal.smsgateway.data.SmsStatus
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.util.UUID
 
-class SmsServer(private val context: Context, port: Int) : NanoHTTPD(port) {
+class SmsServer(
+    private val context: Context,
+    private val config: GatewayConfig
+) : NanoHTTPD(config.port) {
 
-    private val config = GatewayConfig(context)
     private val statusStore = MessageStatusStore(context)
     private val smsManager: SmsManager by lazy {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            context.getSystemService(SmsManager::class.java)!!
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            context.getSystemService(SmsManager::class.java)
         } else {
             @Suppress("DEPRECATION")
             SmsManager.getDefault()
@@ -33,49 +36,26 @@ class SmsServer(private val context: Context, port: Int) : NanoHTTPD(port) {
     }
 
     override fun serve(session: IHTTPSession): Response {
-        val headers = session.headers
-        val authHeader = headers["authorization"] ?: headers["Authorization"] ?: headers.entries.find { 
-            it.key.equals("authorization", ignoreCase = true) 
-        }?.value
-
-        val storedApiKey = config.getApiKey()
-
-        if (authHeader?.trim() != storedApiKey.trim()) {
-            Log.w("SmsServer", "Unauthorized access attempt. Received: $authHeader")
-            return newFixedLengthResponse(Response.Status.UNAUTHORIZED, "application/json", "{\"error\": \"Unauthorized\"}")
-        }
-
-        val uri = session.uri
-        if (session.method == Method.GET && uri.startsWith("/status/")) {
-            val messageId = uri.substringAfter("/status/")
-            val status = statusStore.getStatus(messageId)
-            return if (status != null) {
-                newFixedLengthResponse(Response.Status.OK, "application/json", status.toJsonObject().toString())
-            } else {
-                newFixedLengthResponse(Response.Status.NOT_FOUND, "application/json", "{\"error\": \"Message not found\"}")
-            }
-        }
-
         if (session.method != Method.POST) {
-            return newFixedLengthResponse(Response.Status.METHOD_NOT_ALLOWED, MIME_PLAINTEXT, "Method Not Allowed")
+            return newFixedLengthResponse(Response.Status.METHOD_NOT_ALLOWED, "application/json", "{\"error\": \"Method not allowed\"}")
         }
 
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-            Log.e("SmsServer", "SEND_SMS permission denied")
-            return newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json", "{\"error\": \"SEND_SMS permission denied\"}")
+        if (session.uri != "/send") {
+            return newFixedLengthResponse(Response.Status.NOT_FOUND, "application/json", "{\"error\": \"Not found\"}")
+        }
+
+        if (config.apiKey.isNotEmpty()) {
+            val apiKey = session.headers["x-api-key"]
+            if (apiKey != config.apiKey) {
+                return newFixedLengthResponse(Response.Status.UNAUTHORIZED, "application/json", "{\"error\": \"Unauthorized\"}")
+            }
         }
 
         return try {
-            val files = HashMap<String, String>()
-            try {
-                session.parseBody(files)
-            } catch (e: Exception) {
-                Log.e("SmsServer", "Error parsing body", e)
-                return newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json", "{\"error\": \"Malformed request body\"}")
-            }
-
-            val postData = files["postData"]
-            if (postData.isNullOrBlank()) {
+            val map = HashMap<String, String>()
+            session.parseBody(map)
+            val postData = map["postData"]
+            if (postData == null) {
                 return newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json", "{\"error\": \"Missing or empty body\"}")
             }
 
@@ -93,11 +73,12 @@ class SmsServer(private val context: Context, port: Int) : NanoHTTPD(port) {
             }
 
             val messageId = UUID.randomUUID().toString()
+            val parts = smsManager.divideMessage(message)
             val initialStatus = MessageStatus(
                 messageId = messageId,
                 recipient = to,
-                status = "QUEUED",
-                totalParts = smsManager.divideMessage(message).size
+                status = SmsStatus.QUEUED,
+                totalParts = parts.size
             )
             statusStore.saveStatus(initialStatus)
 
@@ -106,68 +87,55 @@ class SmsServer(private val context: Context, port: Int) : NanoHTTPD(port) {
             val responseJson = JSONObject().apply {
                 put("success", true)
                 put("messageId", messageId)
-                put("status", "QUEUED")
+                put("status", SmsStatus.QUEUED.name)
             }
             newFixedLengthResponse(Response.Status.OK, "application/json", responseJson.toString())
         } catch (e: SecurityException) {
             Log.e("SmsServer", "Security exception occurred", e)
             val sw = StringWriter()
             e.printStackTrace(PrintWriter(sw))
-            val errorJson = JSONObject().apply {
-                put("error", e.message ?: "Security permission error")
-                put("type", e.javaClass.simpleName)
-                put("stackTrace", sw.toString())
-            }
-            newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json", errorJson.toString())
+            newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "application/json", "{\"error\": \"Security exception: ${e.message}\"}")
         } catch (e: Exception) {
-            Log.e("SmsServer", "Error handling request", e)
+            Log.e("SmsServer", "Error serving request", e)
             val sw = StringWriter()
             e.printStackTrace(PrintWriter(sw))
-            val errorJson = JSONObject().apply {
-                put("error", e.message ?: "Internal server error")
-                put("type", e.javaClass.simpleName)
-                put("stackTrace", sw.toString())
-            }
-            newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "application/json", errorJson.toString())
+            newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "application/json", "{\"error\": \"Internal server error: ${e.message}\"}")
         }
     }
 
     private fun sendSms(to: String, message: String, messageId: String) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+            val status = statusStore.getStatus(messageId)
+            status?.let {
+                it.status = SmsStatus.SEND_FAILED
+                it.errorMessage = "Permission denied"
+                statusStore.saveStatus(it)
+            }
+            return
+        }
+
         val parts = smsManager.divideMessage(message)
-        val totalParts = parts.size
-        
         val sentIntents = ArrayList<PendingIntent>()
         val deliveryIntents = ArrayList<PendingIntent>()
-        
+
         for (i in parts.indices) {
             val sentIntent = Intent(SmsStatusReceiver.ACTION_SMS_SENT).apply {
-                `package` = context.packageName
                 putExtra(SmsStatusReceiver.EXTRA_MESSAGE_ID, messageId)
                 putExtra(SmsStatusReceiver.EXTRA_PART_INDEX, i)
-                putExtra(SmsStatusReceiver.EXTRA_TOTAL_PARTS, totalParts)
+                putExtra(SmsStatusReceiver.EXTRA_TOTAL_PARTS, parts.size)
+                `package` = context.packageName
             }
-            sentIntents.add(PendingIntent.getBroadcast(
-                context, 
-                messageId.hashCode() + i, 
-                sentIntent, 
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            ))
-            
+            sentIntents.add(PendingIntent.getBroadcast(context, messageId.hashCode() + i, sentIntent, PendingIntent.FLAG_IMMUTABLE))
+
             val deliveryIntent = Intent(SmsStatusReceiver.ACTION_SMS_DELIVERED).apply {
-                `package` = context.packageName
                 putExtra(SmsStatusReceiver.EXTRA_MESSAGE_ID, messageId)
                 putExtra(SmsStatusReceiver.EXTRA_PART_INDEX, i)
-                putExtra(SmsStatusReceiver.EXTRA_TOTAL_PARTS, totalParts)
+                putExtra(SmsStatusReceiver.EXTRA_TOTAL_PARTS, parts.size)
+                `package` = context.packageName
             }
-            deliveryIntents.add(PendingIntent.getBroadcast(
-                context, 
-                messageId.hashCode() + i + 1000000, 
-                deliveryIntent, 
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            ))
+            deliveryIntents.add(PendingIntent.getBroadcast(context, messageId.hashCode() + i + 1000, deliveryIntent, PendingIntent.FLAG_IMMUTABLE))
         }
-        
+
         smsManager.sendMultipartTextMessage(to, null, parts, sentIntents, deliveryIntents)
     }
 }
-

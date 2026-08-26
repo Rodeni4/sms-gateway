@@ -7,6 +7,7 @@ import android.content.Intent
 import android.telephony.SmsMessage
 import android.util.Log
 import ru.myski.vodokanal.smsgateway.data.MessageStatusStore
+import ru.myski.vodokanal.smsgateway.data.SmsStatus
 
 class SmsStatusReceiver : BroadcastReceiver() {
 
@@ -14,7 +15,7 @@ class SmsStatusReceiver : BroadcastReceiver() {
         val action = intent.action ?: return
         val messageId = intent.getStringExtra(EXTRA_MESSAGE_ID) ?: return
         val partIndex = intent.getIntExtra(EXTRA_PART_INDEX, -1)
-        val totalParts = intent.getIntExtra(EXTRA_TOTAL_PARTS, -1)
+        // val totalParts = intent.getIntExtra(EXTRA_TOTAL_PARTS, -1) // Not strictly needed here if we use status.totalParts
 
         val store = MessageStatusStore(context)
         val status = store.getStatus(messageId) ?: return
@@ -26,35 +27,77 @@ class SmsStatusReceiver : BroadcastReceiver() {
                 
                 if (resultCode == Activity.RESULT_OK) {
                     status.sentParts++
-                    if (status.sentParts >= status.totalParts) {
-                        status.status = "SENT"
+                    // Only update status to SENT if it wasn't already failed
+                    if (status.status != SmsStatus.SEND_FAILED) {
+                        if (status.sentParts >= status.totalParts) {
+                            status.status = SmsStatus.SENT
+                        }
                     }
                 } else {
-                    status.status = "SEND_FAILED"
-                    status.errorMessage = "Result code: $resultCode"
+                    status.status = SmsStatus.SEND_FAILED
+                    status.errorMessage = "Send failed with result code: $resultCode"
                 }
                 store.saveStatus(status)
-                Log.d("SmsStatusReceiver", "Message $messageId part $partIndex sent: $resultCode")
+                Log.d("SmsStatusReceiver", "Message $messageId part $partIndex sent result: $resultCode")
             }
             ACTION_SMS_DELIVERED -> {
                 val pdu = intent.getByteArrayExtra("pdu")
-                if (pdu != null) {
-                    val format = intent.getStringExtra("format")
-                    val sms = if (format != null) {
-                        SmsMessage.createFromPdu(pdu, format)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        SmsMessage.createFromPdu(pdu)
+                val format = intent.getStringExtra("format")
+                val smsMessage = if (pdu != null) {
+                    try {
+                        if (format != null) {
+                            SmsMessage.createFromPdu(pdu, format)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            SmsMessage.createFromPdu(pdu)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("SmsStatusReceiver", "Error parsing SMS PDU", e)
+                        null
                     }
-                    status.rawStatus = sms.status
+                } else null
+
+                if (smsMessage != null) {
+                    val rawStatus = smsMessage.status
+                    status.rawStatus = rawStatus
+                    val outcome = SmsStatusClassifier.classifyStatus(rawStatus, format == "3gpp2")
+                    
+                    when (outcome) {
+                        DeliveryOutcome.SUCCESS -> {
+                            status.deliveredParts++
+                            // Only update to DELIVERED if all parts are successful
+                            if (status.deliveredParts >= status.totalParts) {
+                                status.status = SmsStatus.DELIVERED
+                            } else {
+                                status.status = SmsStatus.DELIVERY_PENDING
+                            }
+                        }
+                        DeliveryOutcome.PENDING -> {
+                            // Don't downgrade from DELIVERED or SEND_FAILED
+                            if (status.status != SmsStatus.DELIVERED && status.status != SmsStatus.SEND_FAILED) {
+                                status.status = SmsStatus.DELIVERY_PENDING
+                            }
+                        }
+                        DeliveryOutcome.FAILURE -> {
+                            status.status = SmsStatus.DELIVERY_FAILED
+                            status.errorMessage = "Delivery failed with status $rawStatus"
+                        }
+                        DeliveryOutcome.UNKNOWN -> {
+                            if (status.status != SmsStatus.DELIVERED && status.status != SmsStatus.SEND_FAILED) {
+                                status.status = SmsStatus.DELIVERY_UNKNOWN
+                            }
+                        }
+                    }
+                } else {
+                    // If we can't parse the PDU, we still know *something* happened
+                    if (status.status != SmsStatus.DELIVERED && status.status != SmsStatus.SEND_FAILED) {
+                        status.status = SmsStatus.DELIVERY_UNKNOWN
+                        status.errorMessage = "Failed to parse delivery PDU"
+                    }
                 }
 
-                status.deliveredParts++
-                if (status.deliveredParts >= status.totalParts) {
-                    status.status = "DELIVERED"
-                }
                 store.saveStatus(status)
-                Log.d("SmsStatusReceiver", "Message $messageId part $partIndex delivered")
+                Log.d("SmsStatusReceiver", "Message $messageId part $partIndex delivery report: ${status.status} (raw: ${status.rawStatus})")
             }
         }
     }
