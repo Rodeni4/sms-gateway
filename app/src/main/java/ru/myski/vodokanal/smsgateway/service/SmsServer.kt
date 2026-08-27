@@ -27,7 +27,13 @@ class SmsServer(
 
     private val statusStore = MessageStatusStore(context)
     private val smsManager: SmsManager by lazy {
-        context.getSystemService(SmsManager::class.java)!!
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            context.getSystemService(SmsManager::class.java)
+                ?: @Suppress("DEPRECATION") SmsManager.getDefault()
+        } else {
+            @Suppress("DEPRECATION")
+            SmsManager.getDefault()
+        }
     }
 
     override fun serve(session: IHTTPSession): Response {
