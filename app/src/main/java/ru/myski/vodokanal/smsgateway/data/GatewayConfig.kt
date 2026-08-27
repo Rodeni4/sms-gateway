@@ -10,7 +10,7 @@ class GatewayConfig(context: Context) {
 
     val port: Int = 8082
 
-    fun getApiKey(): String {
+    fun getStoredApiKey(): String {
         var apiKey = prefs.getString(KEY_API_KEY, null)
         if (apiKey == null) {
             apiKey = UUID.randomUUID().toString()
@@ -20,9 +20,9 @@ class GatewayConfig(context: Context) {
         }
         return apiKey
     }
-    
+
     val apiKey: String
-        get() = getApiKey()
+        get() = getStoredApiKey()
 
     companion object {
         private const val PREFS_NAME = "gateway_prefs"

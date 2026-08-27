@@ -55,7 +55,7 @@ fun DashboardScreen() {
     val config = remember { GatewayConfig(context) }
     var isRunning by remember { mutableStateOf(SmsGatewayService.isRunning) }
     var ipAddress by remember { mutableStateOf(getLocalIpAddress() ?: "Unknown") }
-    val apiKey = remember { config.getApiKey() }
+    val apiKey = remember { config.apiKey }
 
     val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         arrayOf(Manifest.permission.SEND_SMS, Manifest.permission.POST_NOTIFICATIONS)

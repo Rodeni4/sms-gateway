@@ -36,84 +36,93 @@ class SmsServer(
     }
 
     override fun serve(session: IHTTPSession): Response {
-        if (session.method != Method.POST) {
-            return newFixedLengthResponse(Response.Status.METHOD_NOT_ALLOWED, "application/json", "{\"error\": \"Method not allowed\"}")
+        val uri = session.uri
+        val method = session.method
+
+        // API Key validation (Supports both Authorization and x-api-key headers)
+        val authHeader = session.headers["authorization"] ?: session.headers["Authorization"]
+        val xApiKey = session.headers["x-api-key"]
+        val providedKey = authHeader?.trim() ?: xApiKey?.trim()
+
+        if (config.apiKey.isNotEmpty() && providedKey != config.apiKey) {
+            Log.w("SmsServer", "Unauthorized access attempt to $uri")
+            return newFixedLengthResponse(Response.Status.UNAUTHORIZED, "application/json", "{\"error\": \"Unauthorized\"}")
         }
 
-        if (session.uri != "/send") {
-            return newFixedLengthResponse(Response.Status.NOT_FOUND, "application/json", "{\"error\": \"Not found\"}")
-        }
-
-        if (config.apiKey.isNotEmpty()) {
-            val apiKey = session.headers["x-api-key"]
-            if (apiKey != config.apiKey) {
-                return newFixedLengthResponse(Response.Status.UNAUTHORIZED, "application/json", "{\"error\": \"Unauthorized\"}")
+        // GET /status/{messageId}
+        if (method == Method.GET && uri.startsWith("/status/")) {
+            val messageId = uri.substringAfter("/status/")
+            val status = statusStore.getStatus(messageId)
+            return if (status != null) {
+                newFixedLengthResponse(Response.Status.OK, "application/json", status.toJsonObject().toString())
+            } else {
+                newFixedLengthResponse(Response.Status.NOT_FOUND, "application/json", "{\"error\": \"Message not found\"}")
             }
         }
 
-        return try {
-            val map = HashMap<String, String>()
-            session.parseBody(map)
-            val postData = map["postData"]
-            if (postData == null) {
-                return newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json", "{\"error\": \"Missing or empty body\"}")
+        // POST / or POST /send
+        if (method == Method.POST && (uri == "/" || uri == "/send")) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+                Log.e("SmsServer", "SEND_SMS permission denied")
+                return newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json", "{\"error\": \"SEND_SMS permission denied\"}")
             }
 
-            val json = try {
-                JSONObject(postData)
-            } catch (_: JSONException) {
-                return newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json", "{\"error\": \"Invalid JSON format\"}")
+            return try {
+                val map = HashMap<String, String>()
+                session.parseBody(map)
+                val postData = map["postData"]
+                if (postData.isNullOrBlank()) {
+                    return newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json", "{\"error\": \"Missing or empty body\"}")
+                }
+
+                val json = try {
+                    JSONObject(postData)
+                } catch (_: JSONException) {
+                    return newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json", "{\"error\": \"Invalid JSON format\"}")
+                }
+
+                val to = json.optString("to")
+                val message = json.optString("message")
+
+                if (to.isNullOrBlank() || message.isNullOrBlank()) {
+                    return newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json", "{\"error\": \"Missing 'to' or 'message' fields\"}")
+                }
+
+                val messageId = UUID.randomUUID().toString()
+                val parts = smsManager.divideMessage(message)
+                val initialStatus = MessageStatus(
+                    messageId = messageId,
+                    recipient = to,
+                    status = SmsStatus.QUEUED,
+                    totalParts = parts.size
+                )
+                statusStore.saveStatus(initialStatus)
+
+                sendSms(to, message, messageId)
+                
+                val responseJson = JSONObject().apply {
+                    put("success", true)
+                    put("messageId", messageId)
+                    put("status", SmsStatus.QUEUED.name)
+                }
+                newFixedLengthResponse(Response.Status.OK, "application/json", responseJson.toString())
+            } catch (e: SecurityException) {
+                Log.e("SmsServer", "Security exception occurred", e)
+                val sw = StringWriter()
+                e.printStackTrace(PrintWriter(sw))
+                newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "application/json", "{\"error\": \"Security exception: ${e.message}\"}")
+            } catch (e: Exception) {
+                Log.e("SmsServer", "Error serving request", e)
+                val sw = StringWriter()
+                e.printStackTrace(PrintWriter(sw))
+                newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "application/json", "{\"error\": \"Internal server error: ${e.message}\"}")
             }
-
-            val to = json.optString("to")
-            val message = json.optString("message")
-
-            if (to.isNullOrBlank() || message.isNullOrBlank()) {
-                return newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json", "{\"error\": \"Missing 'to' or 'message' fields\"}")
-            }
-
-            val messageId = UUID.randomUUID().toString()
-            val parts = smsManager.divideMessage(message)
-            val initialStatus = MessageStatus(
-                messageId = messageId,
-                recipient = to,
-                status = SmsStatus.QUEUED,
-                totalParts = parts.size
-            )
-            statusStore.saveStatus(initialStatus)
-
-            sendSms(to, message, messageId)
-            
-            val responseJson = JSONObject().apply {
-                put("success", true)
-                put("messageId", messageId)
-                put("status", SmsStatus.QUEUED.name)
-            }
-            newFixedLengthResponse(Response.Status.OK, "application/json", responseJson.toString())
-        } catch (e: SecurityException) {
-            Log.e("SmsServer", "Security exception occurred", e)
-            val sw = StringWriter()
-            e.printStackTrace(PrintWriter(sw))
-            newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "application/json", "{\"error\": \"Security exception: ${e.message}\"}")
-        } catch (e: Exception) {
-            Log.e("SmsServer", "Error serving request", e)
-            val sw = StringWriter()
-            e.printStackTrace(PrintWriter(sw))
-            newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "application/json", "{\"error\": \"Internal server error: ${e.message}\"}")
         }
+
+        return newFixedLengthResponse(Response.Status.NOT_FOUND, "application/json", "{\"error\": \"Not found\"}")
     }
 
     private fun sendSms(to: String, message: String, messageId: String) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-            val status = statusStore.getStatus(messageId)
-            status?.let {
-                it.status = SmsStatus.SEND_FAILED
-                it.errorMessage = "Permission denied"
-                statusStore.saveStatus(it)
-            }
-            return
-        }
-
         val parts = smsManager.divideMessage(message)
         val sentIntents = ArrayList<PendingIntent>()
         val deliveryIntents = ArrayList<PendingIntent>()
