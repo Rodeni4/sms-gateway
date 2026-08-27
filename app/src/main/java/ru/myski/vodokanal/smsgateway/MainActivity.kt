@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import ru.myski.vodokanal.smsgateway.data.GatewayConfig
 import ru.myski.vodokanal.smsgateway.service.SmsGatewayService
@@ -138,7 +139,7 @@ fun DashboardScreen() {
     LaunchedEffect(Unit) {
         while(true) {
             isRunning = SmsGatewayService.isRunning
-            delay(1000)
+            delay(1.seconds)
         }
     }
 }
@@ -236,11 +237,7 @@ private fun hasPermissions(context: Context, permissions: Array<String>): Boolea
 
 private fun startGatewayService(context: Context) {
     val intent = Intent(context, SmsGatewayService::class.java)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        context.startForegroundService(intent)
-    } else {
-        context.startService(intent)
-    }
+    context.startForegroundService(intent)
 }
 
 private fun stopGatewayService(context: Context) {
