@@ -16,45 +16,90 @@ class SmsStatusReceiver : BroadcastReceiver() {
         val partIndex = intent.getIntExtra(EXTRA_PART_INDEX, -1)
         val totalParts = intent.getIntExtra(EXTRA_TOTAL_PARTS, -1)
 
+        Log.d("SmsStatusReceiver", "Received action: $action for messageId: $messageId (Part $partIndex/$totalParts)")
+
         val store = MessageStatusStore(context)
-        val status = store.getStatus(messageId) ?: return
+        val status = store.getStatus(messageId) ?: run {
+            Log.w("SmsStatusReceiver", "Status not found for messageId: $messageId")
+            return
+        }
 
         when (action) {
             ACTION_SMS_SENT -> {
-                val resultCode = resultCode
-                status.androidResultCode = resultCode
+                val rCode = resultCode
+                status.androidResultCode = rCode
                 
-                if (resultCode == Activity.RESULT_OK) {
-                    status.sentParts++
-                    if (status.sentParts >= status.totalParts) {
-                        status.status = "SENT"
+                Log.d("SmsStatusReceiver", "SENT Event: ResultCode=$rCode")
+                
+                // Only update to SENT if we haven't failed yet
+                if (status.status != "SEND_FAILED" && status.status != "DELIVERY_FAILED") {
+                    if (rCode == Activity.RESULT_OK) {
+                        status.sentParts++
+                        if (status.sentParts >= status.totalParts) {
+                            status.status = "SENT"
+                        }
+                    } else {
+                        status.status = "SEND_FAILED"
+                        status.errorMessage = "Result code: $rCode"
                     }
-                } else {
-                    status.status = "SEND_FAILED"
-                    status.errorMessage = "Result code: $resultCode"
                 }
                 store.saveStatus(status)
-                Log.d("SmsStatusReceiver", "Message $messageId part $partIndex sent: $resultCode")
             }
             ACTION_SMS_DELIVERED -> {
                 val pdu = intent.getByteArrayExtra("pdu")
+                val format = intent.getStringExtra("format")
+                
                 if (pdu != null) {
-                    val format = intent.getStringExtra("format")
-                    val sms = if (format != null) {
-                        SmsMessage.createFromPdu(pdu, format)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        SmsMessage.createFromPdu(pdu)
-                    }
-                    status.rawStatus = sms.status
-                }
+                    try {
+                        val sms = if (format != null) {
+                            SmsMessage.createFromPdu(pdu, format)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            SmsMessage.createFromPdu(pdu)
+                        }
+                        
+                        val rawStatus = sms.status
+                        status.rawStatus = rawStatus
+                        
+                        val result = SmsDeliveryMapper.mapStatus(format, rawStatus)
+                        Log.d("SmsStatusReceiver", "DELIVERED Event: format=$format, pduSize=${pdu.size}, rawStatus=$rawStatus, result=$result")
 
-                status.deliveredParts++
-                if (status.deliveredParts >= status.totalParts) {
-                    status.status = "DELIVERED"
+                        when (result) {
+                            DeliveryResult.SUCCESS -> {
+                                if (partIndex != -1 && !status.deliveredIndices.contains(partIndex)) {
+                                    status.deliveredIndices.add(partIndex)
+                                    status.deliveredParts = status.deliveredIndices.size
+                                    
+                                    if (status.deliveredParts >= status.totalParts) {
+                                        status.status = "DELIVERED"
+                                    }
+                                }
+                            }
+                            DeliveryResult.PENDING -> {
+                                // Only set PENDING if not already success/fail
+                                if (status.status == "SENT" || status.status == "QUEUED") {
+                                    status.status = "DELIVERY_PENDING"
+                                }
+                            }
+                            DeliveryResult.FAILED -> {
+                                status.status = "DELIVERY_FAILED"
+                                status.errorMessage = "Operator status code: $rawStatus"
+                            }
+                            DeliveryResult.UNKNOWN -> {
+                                if (status.status != "DELIVERED") {
+                                    status.status = "DELIVERY_UNKNOWN"
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("SmsStatusReceiver", "Error parsing PDU", e)
+                        status.status = "DELIVERY_UNKNOWN"
+                    }
+                } else {
+                    Log.w("SmsStatusReceiver", "DELIVERED Event: PDU is NULL")
+                    // Do not update status or parts if PDU is null
                 }
                 store.saveStatus(status)
-                Log.d("SmsStatusReceiver", "Message $messageId part $partIndex delivered")
             }
         }
     }

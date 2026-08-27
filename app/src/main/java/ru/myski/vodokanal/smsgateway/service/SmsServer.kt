@@ -139,9 +139,16 @@ class SmsServer(private val context: Context, port: Int) : NanoHTTPD(port) {
         val sentIntents = ArrayList<PendingIntent>()
         val deliveryIntents = ArrayList<PendingIntent>()
         
+        val deliveryFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+
         for (i in parts.indices) {
-            val sentIntent = Intent(SmsStatusReceiver.ACTION_SMS_SENT).apply {
-                `package` = context.packageName
+            // 1. Explicit intent for SENT (IMMUTABLE)
+            val sentIntent = Intent(context, SmsStatusReceiver::class.java).apply {
+                action = SmsStatusReceiver.ACTION_SMS_SENT
                 putExtra(SmsStatusReceiver.EXTRA_MESSAGE_ID, messageId)
                 putExtra(SmsStatusReceiver.EXTRA_PART_INDEX, i)
                 putExtra(SmsStatusReceiver.EXTRA_TOTAL_PARTS, totalParts)
@@ -153,8 +160,9 @@ class SmsServer(private val context: Context, port: Int) : NanoHTTPD(port) {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             ))
             
-            val deliveryIntent = Intent(SmsStatusReceiver.ACTION_SMS_DELIVERED).apply {
-                `package` = context.packageName
+            // 2. Explicit intent for DELIVERED (MUTABLE)
+            val deliveryIntent = Intent(context, SmsStatusReceiver::class.java).apply {
+                action = SmsStatusReceiver.ACTION_SMS_DELIVERED
                 putExtra(SmsStatusReceiver.EXTRA_MESSAGE_ID, messageId)
                 putExtra(SmsStatusReceiver.EXTRA_PART_INDEX, i)
                 putExtra(SmsStatusReceiver.EXTRA_TOTAL_PARTS, totalParts)
@@ -163,7 +171,7 @@ class SmsServer(private val context: Context, port: Int) : NanoHTTPD(port) {
                 context, 
                 messageId.hashCode() + i + 1000000, 
                 deliveryIntent, 
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                deliveryFlags
             ))
         }
         
