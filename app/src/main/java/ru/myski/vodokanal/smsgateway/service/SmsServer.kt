@@ -22,17 +22,12 @@ import java.util.UUID
 
 class SmsServer(
     private val context: Context,
-    private val config: GatewayConfig
+    private val config: GatewayConfig,
 ) : NanoHTTPD(config.port) {
 
     private val statusStore = MessageStatusStore(context)
     private val smsManager: SmsManager by lazy {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            context.getSystemService(SmsManager::class.java)!!
-        } else {
-            @Suppress("DEPRECATION")
-            SmsManager.getDefault()
-        }
+        context.getSystemService(SmsManager::class.java)!!
     }
 
     override fun serve(session: IHTTPSession): Response {
@@ -44,13 +39,13 @@ class SmsServer(
         val xApiKey = session.headers["x-api-key"]
         val providedKey = authHeader?.trim() ?: xApiKey?.trim()
 
-        if (config.apiKey.isNotEmpty() && providedKey != config.apiKey) {
+        if (config.apiKey.isNotEmpty() && (providedKey != config.apiKey)) {
             Log.w("SmsServer", "Unauthorized access attempt to $uri")
             return newFixedLengthResponse(Response.Status.UNAUTHORIZED, "application/json", "{\"error\": \"Unauthorized\"}")
         }
 
         // GET /status/{messageId}
-        if (method == Method.GET && uri.startsWith("/status/")) {
+        if (method == Method.GET && (uri.startsWith("/status/"))) {
             val messageId = uri.substringAfter("/status/")
             val status = statusStore.getStatus(messageId)
             return if (status != null) {
@@ -94,7 +89,7 @@ class SmsServer(
                     messageId = messageId,
                     recipient = to,
                     status = SmsStatus.QUEUED,
-                    totalParts = parts.size
+                    totalParts = parts.size,
                 )
                 statusStore.saveStatus(initialStatus)
 

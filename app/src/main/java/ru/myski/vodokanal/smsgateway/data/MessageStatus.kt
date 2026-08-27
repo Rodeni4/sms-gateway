@@ -19,7 +19,7 @@ data class MessageStatus(
     var deliveredIndices: MutableSet<Int> = mutableSetOf(),
     var rawStatus: Int? = null,
     var androidResultCode: Int? = null,
-    var errorMessage: String? = null
+    var errorMessage: String? = null,
 ) {
     fun toJsonObject(): JSONObject {
         return JSONObject().apply {
@@ -60,7 +60,7 @@ data class MessageStatus(
                 deliveredIndices = indices,
                 rawStatus = if (json.isNull("rawStatus")) null else json.getInt("rawStatus"),
                 androidResultCode = if (json.isNull("androidResultCode")) null else json.getInt("androidResultCode"),
-                errorMessage = if (json.isNull("errorMessage")) null else json.getString("errorMessage")
+                errorMessage = if (json.isNull("errorMessage")) null else json.getString("errorMessage"),
             )
         }
     }

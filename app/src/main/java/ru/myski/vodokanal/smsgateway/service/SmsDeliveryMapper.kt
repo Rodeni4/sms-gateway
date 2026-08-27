@@ -1,7 +1,5 @@
 package ru.myski.vodokanal.smsgateway.service
 
-import android.telephony.SmsMessage
-
 enum class DeliveryResult {
     SUCCESS, PENDING, FAILED, UNKNOWN
 }

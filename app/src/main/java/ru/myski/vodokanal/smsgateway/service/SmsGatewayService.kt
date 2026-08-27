@@ -61,7 +61,7 @@ class SmsGatewayService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "SMS Gateway Service",
-            NotificationManager.IMPORTANCE_LOW
+            NotificationManager.IMPORTANCE_LOW,
         ).apply {
             description = "Running HTTP server for SMS gateway"
         }
@@ -72,7 +72,7 @@ class SmsGatewayService : Service() {
     private fun createNotification(): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent, PendingIntent.FLAG_IMMUTABLE
+            this, 0, intent, PendingIntent.FLAG_IMMUTABLE,
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)

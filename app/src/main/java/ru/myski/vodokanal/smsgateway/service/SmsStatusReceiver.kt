@@ -33,7 +33,7 @@ class SmsStatusReceiver : BroadcastReceiver() {
                 Log.d("SmsStatusReceiver", "SENT Event: ResultCode=$rCode")
                 
                 // Only update to SENT if we haven't failed yet
-                if (status.status != SmsStatus.SEND_FAILED && status.status != SmsStatus.DELIVERY_FAILED) {
+                if ((status.status != SmsStatus.SEND_FAILED) && (status.status != SmsStatus.DELIVERY_FAILED)) {
                     if (rCode == Activity.RESULT_OK) {
                         status.sentParts++
                         if (status.sentParts >= status.totalParts) {

@@ -19,7 +19,7 @@ class MessageStatusStore(context: Context) {
         val jsonStr = prefs.getString(messageId, null) ?: return null
         return try {
             MessageStatus.fromJsonObject(JSONObject(jsonStr))
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
