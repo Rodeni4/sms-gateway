@@ -6,6 +6,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -35,7 +37,6 @@ import ru.myski.vodokanal.smsgateway.data.GatewayConfig
 import ru.myski.vodokanal.smsgateway.service.SmsGatewayService
 import ru.myski.vodokanal.smsgateway.ui.theme.SMSGatewayTheme
 import java.net.Inet4Address
-import java.net.NetworkInterface
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,7 +56,7 @@ fun DashboardScreen() {
     val context = LocalContext.current
     val config = remember { GatewayConfig(context) }
     var isRunning by remember { mutableStateOf(SmsGatewayService.isRunning) }
-    var ipAddress by remember { mutableStateOf(getLocalIpAddress() ?: "Unknown") }
+    var ipAddress by remember { mutableStateOf(getLocalIpAddress(context)) }
     val apiKey = remember { config.apiKey }
 
     val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -81,7 +82,7 @@ fun DashboardScreen() {
             LargeTopAppBar(
                 title = { Text("SMS Gateway") },
                 actions = {
-                    IconButton(onClick = { ipAddress = getLocalIpAddress() ?: "Unknown" }) {
+                    IconButton(onClick = { ipAddress = getLocalIpAddress(context) }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh IP")
                     }
                 }
@@ -96,15 +97,22 @@ fun DashboardScreen() {
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            val displayValue = if (ipAddress.startsWith("192.") || ipAddress.startsWith("10.") || ipAddress.startsWith("172.")) {
+                "http://$ipAddress:8082"
+            } else {
+                ipAddress
+            }
             InfoCard(
                 title = "Local IP Address",
-                value = "http://$ipAddress:8082",
+                value = displayValue,
             ) {
-                val clipboard =
-                    context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("Gateway IP", "http://$ipAddress:8082")
-                clipboard.setPrimaryClip(clip)
-                Toast.makeText(context, "IP Address copied", Toast.LENGTH_SHORT).show()
+                if (displayValue.startsWith("http")) {
+                    val clipboard =
+                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clip = ClipData.newPlainText("Gateway IP", displayValue)
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(context, "IP Address copied", Toast.LENGTH_SHORT).show()
+                }
             }
 
             ApiKeyCard(apiKey = apiKey)
@@ -248,23 +256,30 @@ private fun stopGatewayService(context: Context) {
     context.stopService(intent)
 }
 
-private fun getLocalIpAddress(): String? {
+private fun getLocalIpAddress(context: Context): String {
     try {
-        val interfaces = NetworkInterface.getNetworkInterfaces()
-        while (interfaces.hasMoreElements()) {
-            val networkInterface = interfaces.nextElement()
-            val addresses = networkInterface.inetAddresses
-            while (addresses.hasMoreElements()) {
-                val address = addresses.nextElement()
-                if (!address.isLoopbackAddress && (address is Inet4Address)) {
-                    return address.hostAddress
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = connectivityManager.activeNetwork ?: return "Wi-Fi не подключён"
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return "Wi-Fi не подключён"
+        
+        if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+            return "Wi-Fi не подключён"
+        }
+        
+        val linkProperties = connectivityManager.getLinkProperties(network) ?: return "Wi-Fi не подключён"
+        
+        for (linkAddress in linkProperties.linkAddresses) {
+            val address = linkAddress.address
+            if (address is Inet4Address && !address.isLoopbackAddress) {
+                if (address.isSiteLocalAddress) {
+                    return address.hostAddress ?: continue
                 }
             }
         }
     } catch (e: Exception) {
         e.printStackTrace()
     }
-    return null
+    return "Wi-Fi не подключён"
 }
 
 @Preview(showBackground = true)

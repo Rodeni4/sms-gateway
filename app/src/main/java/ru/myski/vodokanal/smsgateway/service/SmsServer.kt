@@ -50,6 +50,15 @@ class SmsServer(
             return newFixedLengthResponse(Response.Status.UNAUTHORIZED, "application/json", "{\"error\": \"Unauthorized\"}")
         }
 
+        // GET /health
+        if ((method == Method.GET) && (uri == "/health")) {
+            val responseJson = JSONObject().apply {
+                put("success", true)
+                put("status", "RUNNING")
+            }
+            return newFixedLengthResponse(Response.Status.OK, "application/json", responseJson.toString())
+        }
+
         // GET /status/{messageId}
         if ((method == Method.GET) && (uri.startsWith("/status/"))) {
             val messageId = uri.substringAfter("/status/")
