@@ -65,7 +65,7 @@ fun DashboardScreen() {
     }
 
     val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
+        ActivityResultContracts.RequestMultiplePermissions(),
     ) { permissions ->
         val allGranted = permissions.entries.all { it.value }
         if (allGranted) {
@@ -100,11 +100,12 @@ fun DashboardScreen() {
                 title = "Local IP Address",
                 value = "http://$ipAddress:8082",
                 onCopy = {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clipboard =
+                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     val clip = ClipData.newPlainText("Gateway IP", "http://$ipAddress:8082")
                     clipboard.setPrimaryClip(clip)
                     Toast.makeText(context, "IP Address copied", Toast.LENGTH_SHORT).show()
-                }
+                },
             )
 
             ApiKeyCard(apiKey = apiKey)
@@ -159,8 +160,8 @@ fun InfoCard(title: String, value: String, onCopy: (() -> Unit)? = null) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(text = value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
             }
-            if (onCopy != null) {
-                IconButton(onClick = onCopy) {
+            onCopy?.let {
+                IconButton(onClick = it) {
                     Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
                 }
             }
@@ -187,12 +188,15 @@ fun ApiKeyCard(apiKey: String) {
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("API Key", apiKey)
-                    clipboard.setPrimaryClip(clip)
-                    Toast.makeText(context, "API Key copied", Toast.LENGTH_SHORT).show()
-                }) {
+                IconButton(
+                    onClick = {
+                        val clipboard =
+                            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("API Key", apiKey)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(context, "API Key copied", Toast.LENGTH_SHORT).show()
+                    },
+                ) {
                     Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
                 }
             }
@@ -253,7 +257,7 @@ private fun getLocalIpAddress(): String? {
             val addresses = networkInterface.inetAddresses
             while (addresses.hasMoreElements()) {
                 val address = addresses.nextElement()
-                if (!address.isLoopbackAddress && address is Inet4Address) {
+                if (!address.isLoopbackAddress && (address is Inet4Address)) {
                     return address.hostAddress
                 }
             }

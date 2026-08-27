@@ -56,7 +56,7 @@ class SmsServer(
         }
 
         // POST / or POST /send
-        if ((method == Method.POST) && (uri == "/" || uri == "/send")) {
+        if ((method == Method.POST) && ((uri == "/") || (uri == "/send"))) {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
                 Log.e("SmsServer", "SEND_SMS permission denied")
                 return newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json", "{\"error\": \"SEND_SMS permission denied\"}")
@@ -158,7 +158,7 @@ class SmsServer(
                     messageId.hashCode() + i + 1000000,
                     deliveryIntent,
                     deliveryFlags,
-                )
+                ),
             )
         }
 
