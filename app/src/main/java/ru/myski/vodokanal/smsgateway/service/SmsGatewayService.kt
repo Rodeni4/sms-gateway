@@ -13,6 +13,8 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import ru.myski.vodokanal.smsgateway.MainActivity
 
+import ru.myski.vodokanal.smsgateway.data.GatewayConfig
+
 class SmsGatewayService : Service() {
 
     private var server: SmsServer? = null
@@ -32,7 +34,8 @@ class SmsGatewayService : Service() {
         }
 
         if (server == null) {
-            server = SmsServer(this, 8082)
+            val config = GatewayConfig(this)
+            server = SmsServer(this, config)
             try {
                 server?.start()
                 isRunning = true

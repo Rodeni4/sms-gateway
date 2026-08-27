@@ -7,6 +7,7 @@ import android.content.Intent
 import android.telephony.SmsMessage
 import android.util.Log
 import ru.myski.vodokanal.smsgateway.data.MessageStatusStore
+import ru.myski.vodokanal.smsgateway.data.SmsStatus
 
 class SmsStatusReceiver : BroadcastReceiver() {
 
@@ -32,14 +33,14 @@ class SmsStatusReceiver : BroadcastReceiver() {
                 Log.d("SmsStatusReceiver", "SENT Event: ResultCode=$rCode")
                 
                 // Only update to SENT if we haven't failed yet
-                if (status.status != "SEND_FAILED" && status.status != "DELIVERY_FAILED") {
+                if (status.status != SmsStatus.SEND_FAILED && status.status != SmsStatus.DELIVERY_FAILED) {
                     if (rCode == Activity.RESULT_OK) {
                         status.sentParts++
                         if (status.sentParts >= status.totalParts) {
-                            status.status = "SENT"
+                            status.status = SmsStatus.SENT
                         }
                     } else {
-                        status.status = "SEND_FAILED"
+                        status.status = SmsStatus.SEND_FAILED
                         status.errorMessage = "Result code: $rCode"
                     }
                 }
@@ -71,29 +72,29 @@ class SmsStatusReceiver : BroadcastReceiver() {
                                     status.deliveredParts = status.deliveredIndices.size
                                     
                                     if (status.deliveredParts >= status.totalParts) {
-                                        status.status = "DELIVERED"
+                                        status.status = SmsStatus.DELIVERED
                                     }
                                 }
                             }
                             DeliveryResult.PENDING -> {
                                 // Only set PENDING if not already success/fail
-                                if (status.status == "SENT" || status.status == "QUEUED") {
-                                    status.status = "DELIVERY_PENDING"
+                                if (status.status == SmsStatus.SENT || status.status == SmsStatus.QUEUED) {
+                                    status.status = SmsStatus.DELIVERY_PENDING
                                 }
                             }
                             DeliveryResult.FAILED -> {
-                                status.status = "DELIVERY_FAILED"
+                                status.status = SmsStatus.DELIVERY_FAILED
                                 status.errorMessage = "Operator status code: $rawStatus"
                             }
                             DeliveryResult.UNKNOWN -> {
-                                if (status.status != "DELIVERED") {
-                                    status.status = "DELIVERY_UNKNOWN"
+                                if (status.status != SmsStatus.DELIVERED) {
+                                    status.status = SmsStatus.DELIVERY_UNKNOWN
                                 }
                             }
                         }
                     } catch (e: Exception) {
                         Log.e("SmsStatusReceiver", "Error parsing PDU", e)
-                        status.status = "DELIVERY_UNKNOWN"
+                        status.status = SmsStatus.DELIVERY_UNKNOWN
                     }
                 } else {
                     Log.w("SmsStatusReceiver", "DELIVERED Event: PDU is NULL")
