@@ -67,7 +67,7 @@ class SmsStatusReceiver : BroadcastReceiver() {
 
                         when (result) {
                             DeliveryResult.SUCCESS -> {
-                                if (partIndex != -1 && !status.deliveredIndices.contains(partIndex)) {
+                                if ((partIndex != -1) && !status.deliveredIndices.contains(partIndex)) {
                                     status.deliveredIndices.add(partIndex)
                                     status.deliveredParts = status.deliveredIndices.size
                                     
@@ -78,7 +78,7 @@ class SmsStatusReceiver : BroadcastReceiver() {
                             }
                             DeliveryResult.PENDING -> {
                                 // Only set PENDING if not already success/fail
-                                if (status.status == SmsStatus.SENT || status.status == SmsStatus.QUEUED) {
+                                if ((status.status == SmsStatus.SENT) || (status.status == SmsStatus.QUEUED)) {
                                     status.status = SmsStatus.DELIVERY_PENDING
                                 }
                             }

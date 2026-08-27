@@ -45,7 +45,7 @@ class SmsServer(
         }
 
         // GET /status/{messageId}
-        if (method == Method.GET && (uri.startsWith("/status/"))) {
+        if ((method == Method.GET) && (uri.startsWith("/status/"))) {
             val messageId = uri.substringAfter("/status/")
             val status = statusStore.getStatus(messageId)
             return if (status != null) {
@@ -56,7 +56,7 @@ class SmsServer(
         }
 
         // POST / or POST /send
-        if (method == Method.POST && (uri == "/" || uri == "/send")) {
+        if ((method == Method.POST) && (uri == "/" || uri == "/send")) {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
                 Log.e("SmsServer", "SEND_SMS permission denied")
                 return newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json", "{\"error\": \"SEND_SMS permission denied\"}")
@@ -136,12 +136,14 @@ class SmsServer(
                 putExtra(SmsStatusReceiver.EXTRA_PART_INDEX, i)
                 putExtra(SmsStatusReceiver.EXTRA_TOTAL_PARTS, parts.size)
             }
-            sentIntents.add(PendingIntent.getBroadcast(
-                context, 
-                messageId.hashCode() + i, 
-                sentIntent, 
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            ))
+            sentIntents.add(
+                PendingIntent.getBroadcast(
+                    context,
+                    messageId.hashCode() + i,
+                    sentIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
             
             // 2. Explicit intent for DELIVERED (MUTABLE)
             val deliveryIntent = Intent(context, SmsStatusReceiver::class.java).apply {
@@ -150,12 +152,14 @@ class SmsServer(
                 putExtra(SmsStatusReceiver.EXTRA_PART_INDEX, i)
                 putExtra(SmsStatusReceiver.EXTRA_TOTAL_PARTS, parts.size)
             }
-            deliveryIntents.add(PendingIntent.getBroadcast(
-                context, 
-                messageId.hashCode() + i + 1000000, 
-                deliveryIntent, 
-                deliveryFlags
-            ))
+            deliveryIntents.add(
+                PendingIntent.getBroadcast(
+                    context,
+                    messageId.hashCode() + i + 1000000,
+                    deliveryIntent,
+                    deliveryFlags,
+                )
+            )
         }
 
         smsManager.sendMultipartTextMessage(to, null, parts, sentIntents, deliveryIntents)
