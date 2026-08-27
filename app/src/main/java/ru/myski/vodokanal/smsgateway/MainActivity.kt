@@ -99,14 +99,13 @@ fun DashboardScreen() {
             InfoCard(
                 title = "Local IP Address",
                 value = "http://$ipAddress:8082",
-                onCopy = {
-                    val clipboard =
-                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("Gateway IP", "http://$ipAddress:8082")
-                    clipboard.setPrimaryClip(clip)
-                    Toast.makeText(context, "IP Address copied", Toast.LENGTH_SHORT).show()
-                },
-            )
+            ) {
+                val clipboard =
+                    context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText("Gateway IP", "http://$ipAddress:8082")
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(context, "IP Address copied", Toast.LENGTH_SHORT).show()
+            }
 
             ApiKeyCard(apiKey = apiKey)
 
