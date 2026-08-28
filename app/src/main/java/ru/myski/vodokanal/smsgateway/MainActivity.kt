@@ -16,7 +16,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -28,7 +27,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -82,17 +80,7 @@ fun DashboardScreen() {
     Scaffold(
         topBar = {
             LargeTopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            painter = painterResource(id = R.drawable.logo),
-                            contentDescription = "App Logo",
-                            modifier = Modifier.size(40.dp),
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text("SMS Vodokanal")
-                    }
-                },
+                title = { Text("SMS Gateway") },
                 actions = {
                     IconButton(onClick = { ipAddress = getLocalIpAddress(context) }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh IP")
@@ -282,7 +270,7 @@ private fun getLocalIpAddress(context: Context): String {
         
         for (linkAddress in linkProperties.linkAddresses) {
             val address = linkAddress.address
-            if ((address is Inet4Address) && !address.isLoopbackAddress) {
+            if (address is Inet4Address && !address.isLoopbackAddress) {
                 if (address.isSiteLocalAddress) {
                     return address.hostAddress ?: continue
                 }
